@@ -86,7 +86,7 @@ describe('BaseClient', () => {
       );
     });
 
-    it.only('retries to establish TCP connection with back off', (done) => {
+    it('retries to establish TCP connection with back off', (done) => {
       const bytes = crypto.randomBytes(16).toString('hex');
       const host = `${bytes}.some-wierd-unresovable-host.non-existent-tld`;
       const client = new BaseClient(`http://${host}:${18476}/`, {
