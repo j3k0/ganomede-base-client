@@ -22,7 +22,10 @@ describe('BaseClient', () => {
 
     const testApiCall = (options, assertFn, done) => {
       const {address, port} = fixtures.server.address();
-      const client = new BaseClient(`http://${address}:${port}/test-prefix/v1`);
+      const client = new BaseClient(
+        `http://${address}:${port}/test-prefix/v1`,
+        {headers: {'x-common': 'stuff'}}
+      );
 
       client.apiCall(options, (err, reply) => {
         assertFn(err, reply);
@@ -94,6 +97,40 @@ describe('BaseClient', () => {
         call('get', {qs: {req_id: '0xdeadbeef'}}),
         call('put', {body: {req_id: '0xdeadbeef'}})
       ], done);
+    });
+
+    it('default heuristic x-request-id can be overwritten explicitly', (done) => {
+      testApiCall(
+        {method: 'get', path: '/', qs: {req_id: 'no'}, headers: {'x-request-id': 'thingy'}},
+        (err, reply) => {
+          expect(err).to.be.null;
+          expect(reply.headers).to.contain({'x-request-id': 'thingy'});
+        },
+        done
+      );
+    });
+
+    it('common headers are in every request', (done) => {
+      testApiCall(
+        {method: 'get', path: '/'},
+        (err, reply) => {
+          expect(err).to.be.null;
+          expect(reply.headers).to.contain({'x-common': 'stuff'});
+          expect(reply.headers).to.not.eql({'x-common': 'stuff'});
+        },
+        done
+      );
+    });
+
+    it('common headers can be overwritten per request', (done) => {
+      testApiCall(
+        {method: 'get', path: '/', headers: {'x-common': 'thingy'}},
+        (err, reply) => {
+          expect(err).to.be.null;
+          expect(reply.headers).to.contain({'x-common': 'thingy'});
+        },
+        done
+      );
     });
 
     it('errors on non-200 codes', (done) => {
