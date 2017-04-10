@@ -1,6 +1,7 @@
 'use strict';
 
 const url = require('url');
+const crypto = require('crypto');
 const async = require('async');
 const {JsonClient} = require('restify-clients');
 const BaseClient = require('../src/BaseClient');
@@ -83,6 +84,28 @@ describe('BaseClient', () => {
         (err, reply) => expect(err).to.be.instanceof(Error),
         done
       );
+    });
+
+    it.only('retries to establish TCP connection with back off', (done) => {
+      const bytes = crypto.randomBytes(16).toString('hex');
+      const host = `${bytes}.some-wierd-unresovable-host.non-existent-tld`;
+      const client = new BaseClient(`http://${host}:${18476}/`, {
+        retry: {
+          minTimeout: 1,
+          maxTimeout: 50
+        }
+      });
+
+      let nTries = 0;
+
+      const call = client.apiCall({method: 'get', path: '/'}, (err, reply) => {
+        expect(err).to.be.instanceof(Error);
+        expect(err.code).to.equal('ENOTFOUND');
+        expect(nTries).to.eql(3);
+        done();
+      });
+
+      call.on('attempt', () => ++nTries);
     });
 
     it('GET, HEAD and DELETE throw if body is not null', () => {

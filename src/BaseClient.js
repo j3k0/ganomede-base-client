@@ -1,5 +1,6 @@
 'use strict';
 
+const ms = require('ms');
 const {parse, format} = require('url');
 const querystring = require('querystring');
 const {createJsonClient} = require('restify-clients');
@@ -42,7 +43,7 @@ class BaseClient {
     if (body)
       args.push(body);
 
-    this.api[method](...args, (err, req, res, obj) => {
+    return this.api[method](...args, (err, req, res, obj) => {
       return err
         ? callback(err)
         : callback(null, obj);
@@ -69,7 +70,12 @@ class BaseClient {
 BaseClient.defaultOptions = {
   // Enable retries in establishing TCP connection
   // (this will not retry on HTTP errors).
-  // retry: false,
+  retry: {
+    minTimeout: ms('1 second'),
+    maxTimeout: ms('5 seconds'),
+    retries: 3
+  },
+
   headers: {
     'accept': 'application/json',
     'accept-encoding': 'gzip,deflate'
