@@ -187,8 +187,12 @@ describe('BaseClient', () => {
       });
 
       it('options are overwritable', () => {
-        const {retry} = f('https://host/', {retry: {tries: 3}}).apiOptions;
-        expect(retry).to.eql({tries: 3});
+        const {retry} = f('https://host/', {retry: {retries: 5}}).apiOptions;
+        expect(retry).to.eql({
+          minTimeout: 1e3,
+          maxTimeout: 5e3,
+          retries: 5
+        });
       });
 
       it('headers are merged', () => {
