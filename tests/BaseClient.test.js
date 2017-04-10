@@ -18,31 +18,41 @@ describe('BaseClient', () => {
   });
 
   describe('#apiCall()', () => {
-    it('prefixes path', (done) => {
+    it('prefixes path and expands query string', (done) => {
       const client = new BaseClient('https://127.0.0.1:3000/api/v1');
       td.replace(client.api, 'get', td.function());
 
-      td.when(client.api.get('/api/v1/resource', td.callback))
+      td.when(client.api.get('/api/v1/resource?arg=is%20nice', td.callback))
         .thenCallback(null, {}, {}, {result: true});
 
-      client.apiCall('get', '/resource', (err, obj) => {
+      client.apiCall({method: 'get', path: '/resource', qs: {arg: 'is nice'}}, (err, obj) => {
         expect(err).to.be.null;
         expect(obj).to.eql({result: true});
         done();
       });
     });
 
-    it('supports payload (when 4 args are passed in)', (done) => {
-      const client = new BaseClient('https://127.0.0.1:3000/api/v1');
-      td.replace(client.api, 'get', td.function());
+    describe('GET', () => {
+      it('throws if body is not null', () => {
+        const client = new BaseClient('https://localhost');
+        const call = () => client.apiCall({method: 'get', body: 'something'});
+        expect(call).to.throw(BaseClient.RequestSpecError, 'does not support body');
+      });
+    });
 
-      td.when(client.api.get('/api/v1/resource', {payload: true}, td.callback))
-        .thenCallback(null, {}, {}, {result: true});
+    describe('POST', () => {
+      it('supports body', (done) => {
+        const client = new BaseClient('https://127.0.0.1:3000/api/v1');
+        td.replace(client.api, 'post', td.function());
 
-      client.apiCall('get', '/resource', {payload: true}, (err, obj) => {
-        expect(err).to.be.null;
-        expect(obj).to.eql({result: true});
-        done();
+        td.when(client.api.post('/api/v1/resource', {payload: true}, td.callback))
+          .thenCallback(null, {}, {}, {result: true});
+
+        client.apiCall({method: 'post', path: '/resource', body: {payload: true}}, (err, obj) => {
+          expect(err).to.be.null;
+          expect(obj).to.eql({result: true});
+          done();
+        });
       });
     });
   });

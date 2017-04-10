@@ -1,8 +1,10 @@
 'use strict';
 
 const {parse, format} = require('url');
+const querystring = require('querystring');
 const {createJsonClient} = require('restify-clients');
 const lodash = require('lodash');
+const {GanomedeError} = require('ganomede-errors');
 
 class BaseClient {
   constructor (baseUrl, optionsOverwrites = {}) {
@@ -12,12 +14,16 @@ class BaseClient {
     this.api = createJsonClient(apiOptions);
   }
 
-  apiCall (method, path, payloadArg, callbackArg) {
-    const fullPath = this.pathPrefix + path;
-    const hasPayload = arguments.length === 4;
-    const callback = hasPayload ? callbackArg : payloadArg;
-    const args = hasPayload
-      ? [fullPath, payloadArg]
+  apiCall ({method, path, body = null, qs = null}, callback) {
+    const formattedQs = qs ? `?${querystring.stringify(qs)}` : '';
+    const fullPath = this.pathPrefix + path + formattedQs;
+    const bodySupported = (method === 'post') || (method === 'put');
+
+    if (!bodySupported && (body !== null))
+      throw new BaseClient.RequestSpecError('%s does not support body: `%j` passed in, expected `null` (use `qs` param instead)', method, body);
+
+    const args = bodySupported
+      ? [fullPath, body]
       : [fullPath];
 
     this.api[method](...args, (err, req, res, obj) => {
@@ -53,5 +59,7 @@ BaseClient.defaultOptions = {
     'accept-encoding': 'gzip,deflate'
   }
 };
+
+BaseClient.RequestSpecError = class RequestSpecError extends GanomedeError {};
 
 module.exports = BaseClient;
