@@ -1,14 +1,12 @@
 'use strict';
 
 const url = require('url');
+const async = require('async');
 const {JsonClient} = require('restify-clients');
 const BaseClient = require('../src/BaseClient');
 const fixtures = require('./fixtures');
 
 describe('BaseClient', () => {
-  before(fixtures.startServer);
-  after(fixtures.stopServer);
-
   it('new BaseClient()', () => {
     const client = new BaseClient('https://127.0.0.1:3000/a/b/c');
     expect(client).to.be.instanceof(BaseClient);
@@ -18,52 +16,101 @@ describe('BaseClient', () => {
   });
 
   describe('#apiCall()', () => {
-    it('prefixes path and expands query string', (done) => {
-      const client = new BaseClient('https://127.0.0.1:3000/api/v1');
-      td.replace(client.api, 'get', td.function());
+    before(fixtures.startServer);
+    after(fixtures.stopServer);
 
-      td.when(client.api.get(td.matchers.contains({path: '/api/v1/resource?arg=is%20nice'}), td.callback))
-        .thenCallback(null, {}, {}, {result: true});
+    const testApiCall = (options, assertFn, done) => {
+      const {address, port} = fixtures.server.address();
+      const client = new BaseClient(`http://${address}:${port}/test-prefix/v1`);
 
-      client.apiCall({method: 'get', path: '/resource', qs: {arg: 'is nice'}}, (err, obj) => {
-        expect(err).to.be.null;
-        expect(obj).to.eql({result: true});
+      client.apiCall(options, (err, reply) => {
+        assertFn(err, reply);
         done();
       });
+    };
+
+    const nonCallable = () => { throw new Error('Must not be called'); };
+
+    it('throws on missing method or path', () => {
+      const client = new BaseClient('http://localhost');
+      const call = ({method, path} = {}) => () => client.apiCall({method, path}, nonCallable);
+
+      expect(call({path: '/'})).to.throw(
+        BaseClient.RequestSpecError,
+        /^`method` argument must be one of/
+      );
+
+      expect(call({method: 'oops', path: '/'})).to.throw(
+        BaseClient.RequestSpecError,
+        /^`method` argument must be one of/
+      );
+
+      expect(call({method: 'get'})).to.throw(
+        BaseClient.RequestSpecError,
+        /^`path` argument must be non-empty string/
+      );
+    });
+
+    it('prefixes path', (done) => {
+      testApiCall({method: 'get', path: '/resource'}, (err, reply) => {
+        expect(err).to.be.null;
+        expect(reply.path).to.equal('/test-prefix/v1/resource');
+      }, done);
+    });
+
+    it('appends query string', (done) => {
+      testApiCall({method: 'get', path: '/resource', qs: {yes: 'please!'}}, (err, reply) => {
+        expect(err).to.be.null;
+        expect(reply.query).to.eql({yes: 'please!'});
+      }, done);
     });
 
     it('passes in headers specified', (done) => {
-      const client = new BaseClient('https://127.0.0.1:3000/api/v1');
-      td.replace(client.api, 'get', td.function());
-
-      td.when(client.api.get(td.matchers.contains({headers: {'X-Tra': 'header'}}), td.callback))
-        .thenCallback(null, {}, {}, {ok: true});
-
-      client.apiCall({method: 'get', path: '/', headers: {'X-Tra': 'header'}}, done);
-    });
-
-    describe('GET', () => {
-      it('throws if body is not null', () => {
-        const client = new BaseClient('https://localhost');
-        const call = () => client.apiCall({method: 'get', body: 'something'});
-        expect(call).to.throw(BaseClient.RequestSpecError, 'does not support body');
-      });
-    });
-
-    describe('POST', () => {
-      it('supports body', (done) => {
-        const client = new BaseClient('https://127.0.0.1:3000/api/v1');
-        td.replace(client.api, 'post', td.function());
-
-        td.when(client.api.post(td.matchers.contains({path: '/api/v1/resource'}), {payload: true}, td.callback))
-          .thenCallback(null, {}, {}, {result: true});
-
-        client.apiCall({method: 'post', path: '/resource', body: {payload: true}}, (err, obj) => {
+      testApiCall(
+        {method: 'get', path: '/', headers: {'X-Tra': 'Stuff'}},
+        (err, reply) => {
           expect(err).to.be.null;
-          expect(obj).to.eql({result: true});
-          done();
-        });
-      });
+          expect(reply.headers).to.contain({'x-tra': 'Stuff'});
+          expect(reply.headers).to.not.eql({'x-tra': 'Stuff'});
+        },
+        done
+      );
+    });
+
+    it('errors on non-200 codes', (done) => {
+      testApiCall(
+        {method: 'post', path: '/custom', body: {status: 404}},
+        (err, reply) => expect(err).to.be.instanceof(Error),
+        done
+      );
+    });
+
+    it('GET, HEAD and DELETE throw if body is not null', () => {
+      const client = new BaseClient('https://localhost');
+      const call = (method) => () => client.apiCall({method, path: '/', body: 'oops'}, nonCallable);
+      const test = (method) => expect(call(method)).to.throw(
+        BaseClient.RequestSpecError,
+        `\`${method}\` does not support body`
+      );
+
+      test('get');
+      test('head');
+      test('delete');
+    });
+
+    it('POST, PUT and PATCH support bodies', (done) => {
+      const bodyRef = {some: 'nice', json: ['body', {'that is': 'not quite trivial'}, true]};
+      const test = (method, cb) => testApiCall(
+        {method, path: '/', body: bodyRef},
+        (err, reply) => {
+          expect(err).to.be.null;
+          expect(reply.method).to.equal(method);
+          expect(reply.body).to.eql(bodyRef);
+        },
+        cb
+      );
+
+      async.each(['post', 'put', 'patch'], test, done);
     });
   });
 

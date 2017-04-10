@@ -6,17 +6,8 @@ const {createJsonClient} = require('restify-clients');
 const lodash = require('lodash');
 const {GanomedeError} = require('ganomede-errors');
 
+const SUPPORTED_METHODS = ['get', 'head', 'post', 'put', 'patch', 'delete'];
 const SUPPORTS_BODY = ['post', 'put', 'patch'];
-
-// TODO
-const monkeyPatch = (client) => {
-  // const originalFn = client._options;
-
-  // client._options = (method, options) => {
-  //   console.log('HRHEHEHEH', {method, options})
-  //   originalFn.call(client, method, options);
-  // };
-};
 
 class BaseClient {
   constructor (baseUrl, optionsOverwrites = {}) {
@@ -24,21 +15,31 @@ class BaseClient {
 
     this.pathPrefix = pathPrefix;
     this.api = createJsonClient(apiOptions);
-    monkeyPatch(this.api);
+  }
+
+  _checkArgs ({method, path, headers, body, qs}) {
+    const Ctor = BaseClient.RequestSpecError;
+
+    if (!SUPPORTED_METHODS.includes(method))
+      throw new Ctor('`method` argument must be one of `%j`, got `%j`', SUPPORTED_METHODS, method);
+
+    if ((typeof path !== 'string') || (path.length < 1))
+      throw new Ctor('`path` argument must be non-empty string, got `%j`', path);
+
+    if (!SUPPORTS_BODY.includes(method) && (body !== null))
+      throw new Ctor('`%s` does not support body: `%j` passed in, expected `null` (use `qs` param instead)', method, body);
   }
 
   apiCall ({method, path, headers = {}, body = null, qs = null}, callback) {
+    this._checkArgs({method, path, headers, body, qs});
+
     const formattedQs = qs ? `?${querystring.stringify(qs)}` : '';
-    const bodySupported = SUPPORTS_BODY.includes(method);
     const args = [{
       path: this.pathPrefix + path + formattedQs,
       headers
     }];
 
-    if (!bodySupported && (body !== null))
-      throw new BaseClient.RequestSpecError('%s does not support body: `%j` passed in, expected `null` (use `qs` param instead)', method, body);
-
-    if (bodySupported)
+    if (body)
       args.push(body);
 
     this.api[method](...args, (err, req, res, obj) => {
