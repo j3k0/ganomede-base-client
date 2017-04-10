@@ -1,4 +1,4 @@
-# ganomede-errors
+# ganomede-base-client
 
 Simple wrapper around [`restify.JsonClient`](http://restify.com/#jsonclient) to
 start with when writing own API Clients. Changes:
