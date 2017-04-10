@@ -6,25 +6,40 @@ const {createJsonClient} = require('restify-clients');
 const lodash = require('lodash');
 const {GanomedeError} = require('ganomede-errors');
 
+const SUPPORTS_BODY = ['post', 'put', 'patch'];
+
+// TODO
+const monkeyPatch = (client) => {
+  // const originalFn = client._options;
+
+  // client._options = (method, options) => {
+  //   console.log('HRHEHEHEH', {method, options})
+  //   originalFn.call(client, method, options);
+  // };
+};
+
 class BaseClient {
   constructor (baseUrl, optionsOverwrites = {}) {
     const {pathPrefix, apiOptions} = BaseClient.parseConstructorOptions(baseUrl, optionsOverwrites);
 
     this.pathPrefix = pathPrefix;
     this.api = createJsonClient(apiOptions);
+    monkeyPatch(this.api);
   }
 
-  apiCall ({method, path, body = null, qs = null}, callback) {
+  apiCall ({method, path, headers = {}, body = null, qs = null}, callback) {
     const formattedQs = qs ? `?${querystring.stringify(qs)}` : '';
-    const fullPath = this.pathPrefix + path + formattedQs;
-    const bodySupported = (method === 'post') || (method === 'put');
+    const bodySupported = SUPPORTS_BODY.includes(method);
+    const args = [{
+      path: this.pathPrefix + path + formattedQs,
+      headers
+    }];
 
     if (!bodySupported && (body !== null))
       throw new BaseClient.RequestSpecError('%s does not support body: `%j` passed in, expected `null` (use `qs` param instead)', method, body);
 
-    const args = bodySupported
-      ? [fullPath, body]
-      : [fullPath];
+    if (bodySupported)
+      args.push(body);
 
     this.api[method](...args, (err, req, res, obj) => {
       return err

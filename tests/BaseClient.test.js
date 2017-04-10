@@ -22,7 +22,7 @@ describe('BaseClient', () => {
       const client = new BaseClient('https://127.0.0.1:3000/api/v1');
       td.replace(client.api, 'get', td.function());
 
-      td.when(client.api.get('/api/v1/resource?arg=is%20nice', td.callback))
+      td.when(client.api.get(td.matchers.contains({path: '/api/v1/resource?arg=is%20nice'}), td.callback))
         .thenCallback(null, {}, {}, {result: true});
 
       client.apiCall({method: 'get', path: '/resource', qs: {arg: 'is nice'}}, (err, obj) => {
@@ -30,6 +30,16 @@ describe('BaseClient', () => {
         expect(obj).to.eql({result: true});
         done();
       });
+    });
+
+    it('passes in headers specified', (done) => {
+      const client = new BaseClient('https://127.0.0.1:3000/api/v1');
+      td.replace(client.api, 'get', td.function());
+
+      td.when(client.api.get(td.matchers.contains({headers: {'X-Tra': 'header'}}), td.callback))
+        .thenCallback(null, {}, {}, {ok: true});
+
+      client.apiCall({method: 'get', path: '/', headers: {'X-Tra': 'header'}}, done);
     });
 
     describe('GET', () => {
@@ -45,7 +55,7 @@ describe('BaseClient', () => {
         const client = new BaseClient('https://127.0.0.1:3000/api/v1');
         td.replace(client.api, 'post', td.function());
 
-        td.when(client.api.post('/api/v1/resource', {payload: true}, td.callback))
+        td.when(client.api.post(td.matchers.contains({path: '/api/v1/resource'}), {payload: true}, td.callback))
           .thenCallback(null, {}, {}, {result: true});
 
         client.apiCall({method: 'post', path: '/resource', body: {payload: true}}, (err, obj) => {
