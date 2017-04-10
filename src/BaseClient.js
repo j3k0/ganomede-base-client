@@ -31,17 +31,25 @@ class BaseClient {
       throw new Ctor('`%s` does not support body: `%j` passed in, expected `null` (use `qs` param instead)', method, body);
   }
 
+  _extendedHeaders ({body, qs}) {
+    const reqId = (qs || {}).req_id || (body || {}).req_id || null;
+    return reqId
+      ? {'x-request-id': reqId}
+      : {};
+  }
+
   apiCall ({method, path, headers = {}, body = null, qs = null}, callback) {
     this._checkArgs({method, path, headers, body, qs});
 
     const formattedQs = qs ? `?${querystring.stringify(qs)}` : '';
-    const args = [{
+    const opts = {
       path: this.pathPrefix + path + formattedQs,
-      headers
-    }];
+      headers: Object.assign(this._extendedHeaders({body, qs}), headers)
+    };
 
-    if (body)
-      args.push(body);
+    const args = body
+      ? [opts, body]
+      : [opts];
 
     return this.api[method](...args, (err, req, res, obj) => {
       return err

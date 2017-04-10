@@ -78,6 +78,24 @@ describe('BaseClient', () => {
       );
     });
 
+    it('inserts `x-request-id` header if `body` or `qs` has `req_id` prop', (done) => {
+      const call = (method, {qs = null, body = null}) => (cb) => testApiCall(
+        {method, path: '/', qs, body},
+        (err, reply) => {
+          expect(err).to.be.null;
+          expect(reply.headers).to.contain({'x-request-id': '0xdeadbeef'});
+          expect(reply.query).to.eql(qs || {});
+          expect(reply.body).to.eql(body || {});
+        },
+        cb
+      );
+
+      async.parallel([
+        call('get', {qs: {req_id: '0xdeadbeef'}}),
+        call('put', {body: {req_id: '0xdeadbeef'}})
+      ], done);
+    });
+
     it('errors on non-200 codes', (done) => {
       testApiCall(
         {method: 'post', path: '/custom', body: {status: 404}},
