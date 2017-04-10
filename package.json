@@ -1,7 +1,7 @@
 {
   "name": "ganomede-base-client",
   "version": "1.0.0",
-  "description": "Errors and handler functions for Ganomede services",
+  "description": "Simple wrapper for restify.JsonClient",
   "main": "index.js",
   "scripts": {
     "test": "LOG_LEVEL=FATAL mocha --bail --no-exit --throw-deprecation tests/helper.js 'tests/**/*.test.js'",
