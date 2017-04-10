@@ -1,130 +1,53 @@
 # ganomede-errors
 
-Ganomede's extended restify errors
+Simple wrapper around [`restify.JsonClient`](http://restify.com/#jsonclient) to
+start with when writing own API Clients. Changes:
 
-The way to distinguish our app's logic-level errors from others.
-(Like `socket hang up` vs `user already exists`.)
+  - single `request()`-like method (`#apiCall({method, path, body, headers, qs})`), meaning:
+    - base urls;
+    - per request headers;
+    - easier query string;
+  - supports path prefixes (useful if you want to have something like `/api/v1` in front of all requests).
 
 ## Basic Usage
 
-The idea is to create error classes like `UserNotFoundError extends GanomedeError`,
-define appropriate `statusCode` and `message` on it with optional params,
-and return those from lower-level places.
+Import `BaseClient` and define higher-level APIs.
+
 
 ``` js
-//
-// Database.js
-//
+const BaseClient = require('ganomede-base-client');
 
-class Db {
-  getDocument (id, callback) {
-    this.redis.get(id, (err, reply) => {
-      // Propagate "fundamental" errors.
-      if (err)
-        return callback(err);
+class MyApi extends BaseClient {
+  constructor ({hostname = 'my-api.example.org', version = 1, apiKey}) {
+    super(
+      `https://${hostname}/version-${version}`,  // base url
+      {headers: {'X-API-Key': apiKey}}           // more options
+    );
+  }
 
-      // Wrap app-level errors into more meaningful objects.
-      if (reply === null)
-        return callback(new Db.DocumentNotFoundError({id}));
-
-      callback(null, reply);
-    });
+  ping (callback) {
+    // Will issue HTTP GET to
+    // https://my-api.example.org/version-1/ping?check-auth=1
+    //
+    // Callback will contain JSON response (if any, otherwise empty object),
+    // see restify docs for more details at:
+    // https://github.com/restify/clients
+    //
+    // `call` is what restify methods return (like #get(), #post(), etc.).
+    const call = this.apiCall(
+      {method: 'get', path: '/ping', qs: {'check-auth': 1}},
+      callback
+    );
   }
 }
-
-Db.DocumentNotFoundError = class DocumentNotFoundError extends GanomedeError {
-  constructor (query) {
-    super('No documents matching `%j`', query);
-    this.severity = 'info';
-    this.statusCode = 404;
-  }
-};
 ```
 
-In app-code, make use of more meaningful errors and act accordingly.
+## Custom defaults
 
-``` js
-//
-// app.js
-//
+Some defaults are changed from those of restify:
 
-app.get('/users/:id', (req, res) => {
-  db.getDocument(`users:${req.params.id}`, (err, user) => {
-    if (err instanceof Db.DocumentNotFoundError) {
-      // This will:
-      //   - call `logger[err.severity]` with approprite message;
-      //   - call `next(toRestError(err))`.
-      //
-      // Resulting in HTTP response will have appropriate status code (`err.statusCode`)
-      // and contain JSON body:
-      //
-      // { // `error.name` (default is `error.constructor.name`)
-      //   "restCode": "DocumentNotFoundError",
-      //
-      //   // `error.statusCode`,
-      //   "statusCode": 404,
-      //
-      //   // `error.message`
-      //   "message": "No documents matching `{\"id\": \"users:4\"}`"
-      // }
-      return sendHttpError(logger, next, err);
-    }
-    else if (err) {
-      // Same as above, except log level is "error"
-      // and `next` will receive restify.InternalServerError instance
-      // (which `next` already knows how to upcast to `RestError`).
-      return sendHttpError(logger, next, new restify.InternalServerError());
-    }
-
-    res.json(user);
-  });
-});
-```
-
-It can also be sometimes useful to have more granular error classes.
-
-``` js
-//
-// Orm.js
-//
-
-const findUser = (userId, callback) => {
-  new Db().getDocument(userId, (err, json) => {
-    if (err instanceof Db.DocumentNotFoundError) {
-      // here we now what missing document means
-      // (and DB knows how to distinguish missing document errors
-      // from, say, "cannot connect to hostname")
-      return callback(new UserNotFoundError(userId));
-    }
-    else if (err)
-      return callback(err);
-
-    callback(null, json);
-  });
-};
-```
-
-## Included Errors
-
-Some situations are quite common, so error classes for them with
-appropriate severity levels, status codes and names are already included.
-
-Class Name (as exported) | HTTP Status | Rest Code | Message | Severity
--------------------------|-------------|-----------|---------|---------
-`InvalidAuthTokenError` | 401 | `'InvalidAuthTokenError'` | Invalid auth token | `severity.info`
-`InvalidCredentialsError` | 401 | `'InvalidCredentialsError'` | Invalid credentials | `severity.info`
-`RequestValidationError` | 400 | First argument passed to constructor | Rest of constructor arguments | severity.info
-
-``` js
-if (!req.params.token)
-  return sendHttpError(logger, next, new InvalidAuthTokenError());
-
-if (req.headers['Authorization'] !== 'Bearer 0xdeadbeef')
-  return sendHttpError(logger, next, new InvalidCredentialsError());
-
-if (typeof req.body.message !== 'string')
-  return sendHttpError(logger, next, new RequestValidationError(
-    'BadMessage',
-    'Message must be a string, got `%s`', typeof req.body.message
-  ));
-```
+  - up to 3 attempts on establishing TCP connections
+    with exponential timeout between 1 and 5 seconds;
+  - default headers:
+    - `accept` of `application/json`;
+    - `accept-encoding` of `gzip,deflate`.
