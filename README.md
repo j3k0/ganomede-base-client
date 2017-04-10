@@ -3,11 +3,12 @@
 Simple wrapper around [`restify.JsonClient`](http://restify.com/#jsonclient) to
 start with when writing own API Clients. Changes:
 
-  - single `request()`-like method (`#apiCall({method, path, body, headers, qs})`), meaning:
+  - single `request()`-like method (`#apiCall({method, path, body, headers, qs}, callback)`), meaning:
     - base urls;
     - per request headers;
     - easier query string;
-  - supports path prefixes (useful if you want to have something like `/api/v1` in front of all requests).
+  - supports path prefixes (useful if you want to have something like `/api/v1` in front of all requests);
+  - if `body` or `qs` contain `req_id` param, sets `x-request-id` header to value of it.
 
 ## Basic Usage
 
